@@ -31,6 +31,10 @@ const Book = sequelize.define('Book', {
         },
         allowNull: false,
     },
+    photo: { // Changed to a single string to store a single photo path
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
 }, {
     timestamps: true, // Adds `createdAt` and `updatedAt` fields automatically
 });

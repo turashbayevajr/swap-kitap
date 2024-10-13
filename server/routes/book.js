@@ -2,8 +2,12 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const router = express.Router();
 const Book = require('../models/book');
-const checkOwnership = require('../middleware/checkOwnership');
+// const checkOwnership = require('../middleware/checkOwnership');
 const authenticateToken = require('../middleware/auth');
+const checkAdmin = require('../middleware/checkAdmin');
+const upload= require("../middleware/upload");
+router.use(authenticateToken); 
+
 
 router.get('/', async (req, res) => {
     try {
@@ -36,19 +40,21 @@ const validateBook = [
     body('author').notEmpty().withMessage('Author is required'),
     body('genre').notEmpty().withMessage('Genre is required'),
 ];
-router.use(authenticateToken);
 
-// Create a new book (authentication required)
-router.post('/', authenticateToken, validateBook, async (req, res) => {
+// Admin routes for book management (only accessible to admins)
+router.post('/', checkAdmin, upload, validateBook, async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
     const { title, author, genre } = req.body;
+    
+    // Get the path of the uploaded photo
+    const photo = req.file ? req.file.path : null; // Handle if no file is uploaded
 
     try {
-        const newBook = await Book.create({ title, author, genre, userId: req.user.id });
+        const newBook = await Book.create({ title, author, genre, userId: req.user.id, photo });
         return res.status(201).json({ message: 'Book created successfully', book: newBook });
     } catch (error) {
         console.error('Error creating book:', error);
@@ -56,8 +62,8 @@ router.post('/', authenticateToken, validateBook, async (req, res) => {
     }
 });
 
-// Update a book by ID (authentication and ownership check required)
-router.put('/:id', authenticateToken, checkOwnership, validateBook, async (req, res) => {
+// Update a book by ID (authentication and admin check required)
+router.put('/:id', checkAdmin, upload, validateBook, async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
@@ -65,15 +71,17 @@ router.put('/:id', authenticateToken, checkOwnership, validateBook, async (req, 
 
     const { id } = req.params;
     const { title, author, genre } = req.body;
+    
+    // Get the path of the uploaded photo
+    const photo = req.file ? req.file.path : null; // Handle if no file is uploaded
 
     try {
         const book = await Book.findByPk(id);
-
         if (!book) {
             return res.status(404).json({ message: 'Book not found' });
         }
 
-        const updatedBook = await book.update({ title, author, genre });
+        const updatedBook = await book.update({ title, author, genre, photo });
         return res.status(200).json({ message: 'Book updated successfully', book: updatedBook });
     } catch (error) {
         console.error('Error updating book:', error);
@@ -81,10 +89,16 @@ router.put('/:id', authenticateToken, checkOwnership, validateBook, async (req, 
     }
 });
 
-// Delete a book by ID (authentication and ownership check required)
-router.delete('/:id', authenticateToken, checkOwnership, async (req, res) => {
+
+router.delete('/:id', checkAdmin, async (req, res) => {
     try {
-        await req.book.destroy();
+        const { id } = req.params;
+        const book = await Book.findByPk(id);
+        if (!book) {
+            return res.status(404).json({ message: 'Book not found' });
+        }
+
+        await book.destroy();
         return res.status(200).json({ message: 'Book deleted successfully' });
     } catch (error) {
         console.error('Error deleting book:', error);
